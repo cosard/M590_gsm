@@ -1,8 +1,16 @@
 #include <SoftwareSerial.h>
 
-SoftwareSerial mySerial(2, 3); // RX, TX
+#define USE_PDU_FMT
 
-#define PHONE_NUM   "+905347253738"
+#ifdef USE_PDU_FMT
+  extern "C" {
+    #include "pdu.h"
+  }
+#endif
+
+SoftwareSerial debugSerial(2, 3); // RX, TX
+
+#define PHONE_NUM   "MY_PHONE_NUMBER"
 
 int set_char_set();
 int set_sms_mode();
@@ -80,11 +88,11 @@ int wait_for_ack() {
   //Serial.flush();
   //delay(200);
   
-  mySerial.println("ack");
+  debugSerial.println("ack");
   
   while(1) {
     if(millis() - t > 3000) {
-      mySerial.println("timeout");
+      debugSerial.println("timeout");
       return -1;
     }
     
@@ -94,9 +102,9 @@ int wait_for_ack() {
       if(s.length() <= 2)
         continue;
       
-      mySerial.print(" ACK: <");
-      mySerial.print(s);
-      mySerial.println(">");
+      debugSerial.print(" ACK: <");
+      debugSerial.print(s);
+      debugSerial.println(">");
       
       if(s.indexOf("OK") != -1)
         return 0;
@@ -113,7 +121,11 @@ int set_char_set() {
 }
 
 int set_sms_mode() {
-  Serial.print("AT+CMGF=1\r");  // pdu mode
+#ifdef USE_PDU_FMT  
+  Serial.print("AT+CMGF=0\r");  // pdu mode
+#else
+  Serial.print("AT+CMGF=1\r");
+#endif  
   return wait_for_ack();
 }
 
@@ -159,7 +171,7 @@ int check_status(int status) {
   if(status == -1)
     return -1;
 
-  mySerial.println("chkstat");
+  debugSerial.println("chkstat");
   
   Serial.print("AT+XCIND=");
   Serial.print((1 << status));
@@ -175,7 +187,7 @@ int check_status(int status) {
   while(1) {
     if(millis() - t > 3000) {
       ret = 0;
-      mySerial.println("timeout");
+      debugSerial.println("timeout");
       Serial.flush();
       goto end;
     }
@@ -195,8 +207,8 @@ int check_status(int status) {
     //delay(50);
   }
   
-  mySerial.println("Stat: ");
-  mySerial.println(s);
+  debugSerial.println("Stat: ");
+  debugSerial.println(s);
   
   if(s.indexOf("1") != -1)
     ret = 1;
@@ -228,8 +240,8 @@ int list_messages(int type, int *index_result, char *msg_out, char *from, int pd
   String s;
   int got_header = 0;
   
-  mySerial.print("list msg. type ");
-  mySerial.println(type);
+  debugSerial.print("list msg. type ");
+  debugSerial.println(type);
   
   if(!pdu_fmt) {
     Serial.println("AT+CMGL=" + type );
@@ -237,7 +249,7 @@ int list_messages(int type, int *index_result, char *msg_out, char *from, int pd
   
     while(1) {
       if(millis() - t > 3000) {
-        mySerial.println("timeoutt");
+        debugSerial.println("timeoutt");
         return -1;
       }
   
@@ -261,11 +273,11 @@ int list_messages(int type, int *index_result, char *msg_out, char *from, int pd
       }
 
       ch[++i] = '\0';
-      mySerial.print("Len: ");
-      mySerial.print(i);
-      mySerial.print("Incoming: <");
-      mySerial.print(ch);
-      mySerial.println(">");
+      debugSerial.print("Len: ");
+      debugSerial.print(i);
+      debugSerial.print("Incoming: <");
+      debugSerial.print(ch);
+      debugSerial.println(">");
 
       if(strstr(ch, "ERR") ) {
         ret = -1;
@@ -287,8 +299,8 @@ int list_messages(int type, int *index_result, char *msg_out, char *from, int pd
         message_index += atoi(num);
         *(index_result + message_count++) = message_index;
 
-        mySerial.print("msg index: ");
-        mySerial.println(message_index);
+        debugSerial.print("msg index: ");
+        debugSerial.println(message_index);
 
         
         temp = strchr(temp, ',');
@@ -310,7 +322,7 @@ int list_messages(int type, int *index_result, char *msg_out, char *from, int pd
     wait_for_ack();
     while(1) {
       if(millis() - t > 3000) {
-        mySerial.println("timeout");
+        debugSerial.println("timeout");
         return -1;
       }
   
@@ -321,9 +333,9 @@ int list_messages(int type, int *index_result, char *msg_out, char *from, int pd
           continue;
     
         if(!got_header) {
-          mySerial.print("header: <");
-          mySerial.print(s);
-          mySerial.println(">");
+          debugSerial.print("header: <");
+          debugSerial.print(s);
+          debugSerial.println(">");
           got_header = 1;
           
           i = s.indexOf("CMGL");
@@ -337,8 +349,8 @@ int list_messages(int type, int *index_result, char *msg_out, char *from, int pd
             message_index += atoi(num);
             *(index_result + message_count++) = message_index;
 
-            mySerial.print("msg index: ");
-            mySerial.println(message_index);
+            debugSerial.print("msg index: ");
+            debugSerial.println(message_index);
           }
           continue;
         }
@@ -346,16 +358,16 @@ int list_messages(int type, int *index_result, char *msg_out, char *from, int pd
           if(message_count == 1) {
             strncpy(msg_out, s.c_str(), s.length() - 1);
           }
-          mySerial.print("PDU: <");
-          mySerial.print(s);
-          mySerial.println(">");
+          debugSerial.print("PDU: <");
+          debugSerial.print(s);
+          debugSerial.println(">");
           break;
         }       
       }
     }
   }
-  mySerial.print("msg count: ");
-  mySerial.println(message_count);
+  debugSerial.print("msg count: ");
+  debugSerial.println(message_count);
   return message_count;
 }
 
@@ -373,7 +385,7 @@ int read_messages(int index, char *msg) {
   
   while(1) {
     if(millis() - t > 3000) {
-      mySerial.println("timeoutt");
+      debugSerial.println("timeoutt");
       return -1;
     }
       
@@ -397,7 +409,7 @@ int read_messages(int index, char *msg) {
     }
 
     ch[++i] = '\0';
-    mySerial.println(ch);
+    debugSerial.println(ch);
     
     if(strstr(ch, "ERR") ) {
       ret = -1;
@@ -413,15 +425,15 @@ int read_messages(int index, char *msg) {
       wait_for_ack();
       strcpy(msg, ch);
       ret = 0;
-      mySerial.print("i: ");
-      mySerial.println(i);
-      mySerial.print("Msg: ");
-      mySerial.println(ch);
+      debugSerial.print("i: ");
+      debugSerial.println(i);
+      debugSerial.print("Msg: ");
+      debugSerial.println(ch);
       break;
     }
   }
-  mySerial.print("ret: ");
-  mySerial.println(ret);
+  debugSerial.print("ret: ");
+  debugSerial.println(ret);
   return ret;
 }
 
@@ -437,27 +449,23 @@ void send_cmd(int cmd) {
   
 }
 
-
-//const char pdu[] = "0791093592100000040ED0D4AA74392C32990000715003619344216431DC0D07A297D7A0759DCD0EBBD36D767A0D6ABEC5697619347CBBDDE5311D344F9BE5E5793ACF2E83E6697A395F069DD3F2F41C940FC3C3E2343B2D9FA7DD69BD0B242D9BCBF2B07B0E5ABEC93A10EE7A85D24042184C06";
-//const char pdu[] = "0791095589000800440C910935745273830000716020611040210C032401016896E5E8B0380C";
-
 void setup()
 {
   Serial.begin(9600);  //Baud rate of the GSM/GPRS Module 
  
-  mySerial.begin(9600);
-  mySerial.println("\nStart..");
+  debugSerial.begin(9600);
+  debugSerial.println("\nStart..");
 #if 0
   sms_t sms;
   if ( sms_decode_pdu(pdu, strlen(pdu), &sms) == 0 ) {
     /* write response to the received SMS */
-    mySerial.print("This is my response. Hello world!\n");
+    debugSerial.print("This is my response. Hello world!\n");
   }
   else {
-    mySerial.print("Failed to process SMS message\n");
+    debugSerial.print("Failed to process SMS message\n");
   }
 
-  mySerial.println((char *)sms.message);
+  debugSerial.println((char *)sms.message);
 
   for(;;);
 #endif
@@ -483,7 +491,7 @@ void setup()
   set_sms_mode();
   delay(500);  
   
-  mySerial.println("Delete Messages");
+  debugSerial.println("Delete Messages");
   Serial.print("AT+CMGD=0,4\r");
   wait_for_ack();
   
@@ -498,19 +506,20 @@ void loop()
   int msg_index[16] = {0};
   char msg[128] = {0};
   char from[25] = {0};
-  //sms_t sms;
 
   if(check_status(UNREAD_SMS) != 0) {
-    mySerial.println("yeni mesaj var");
+    debugSerial.println("yeni mesaj var");
     digitalWrite(13, HIGH);
 
-    mySerial.println("View Unread Messages");
-    msg_count = list_messages(REC_UNREAD, msg_index, msg, from, 0);
-/*
+    debugSerial.println("View Unread Messages");
+#ifdef USE_PDU_FMT
+    sms_t sms;
+    msg_count = list_messages(REC_UNREAD, msg_index, msg, from, 1);
+
     if(msg_count) {
-      if ( sms_decode_pdu(pdu, strlen(pdu), &sms) == 0 ) {
-        mySerial.print("Incoming msg: ");
-        mySerial.println((char *)sms.message);
+      if ( sms_decode_pdu(msg, strlen(msg), &sms) == 0 ) {
+        debugSerial.print("Incoming msg: ");
+        debugSerial.println((char *)sms.message);
         //delay(1000);
         //send_sms(msg);
         //delay(1000);
@@ -518,21 +527,27 @@ void loop()
         delay(500);
       }
     }
-*/
-    mySerial.print("From: ");
-    mySerial.println(from);
+#else
 
-    read_messages(msg_index[0], msg);
-    mySerial.print("Msg: ");
-    mySerial.println(msg);
-    delay(500);
-    send_sms(msg, from);
-    delay(500);
-    delete_messages(msg_index[0]);
-    delay(500);
+    msg_count = list_messages(REC_UNREAD, msg_index, msg, from, 0);
+    if(msg_count) {
+      debugSerial.print("From: ");
+      debugSerial.println(from);
+
+      read_messages(msg_index[0], msg);
+      debugSerial.print("Msg: ");
+      debugSerial.println(msg);
+      delay(500);
+      send_sms(msg, from);
+      delay(500);
+      delete_messages(msg_index[0]);
+      delay(500);
+    }
+#endif  
   }
   else
     digitalWrite(13, LOW);
   
   delay(2000);
 }
+
